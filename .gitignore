@@ -1,0 +1,23 @@
+# Data files
+data/*.fastq*
+data/*.fasta
+data/*.bam
+*.fq.gz
+
+# Results
+results/temp/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# API keys - CRITICAL!
+configs/api_keys.env
+*.key
+
+# Temp
+*.tmp
+.DS_Store
