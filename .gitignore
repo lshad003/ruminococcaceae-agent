@@ -21,3 +21,5 @@ configs/api_keys.env
 # Temp
 *.tmp
 .DS_Store
+*.fa
+data/HQ_mags/
