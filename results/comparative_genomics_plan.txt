@@ -1,0 +1,525 @@
+======================================================================
+COMPARATIVE GENOMICS STRATEGY WITH RESOURCE REQUIREMENTS
+======================================================================
+
+Dataset: 284 high-quality herptile Ruminococcaceae MAGs (836 MB)
+Target: ~400-500 total genomes (284 herptile + 200 reference)
+======================================================================
+
+[PART 1: Download Strategy & Requirements]
+----------------------------------------------------------------------
+Here's a comprehensive strategy for downloading and analyzing Ruminococcaceae reference genomes for comparison with your herptile MAGs:
+
+## DOWNLOAD STRATEGY
+
+### 1. **Target Genome Numbers**
+- **Total recommended: 800-1,200 genomes**
+  - Human: 200-300 genomes (well-characterized, high diversity)
+  - Ruminants (cow, sheep, goat): 150-200 genomes (family's namesake hosts)
+  - Other mammals: 100-150 genomes (mouse, pig, horse, etc.)
+  - Birds: 50-100 genomes (poultry, wild birds)
+  - Environmental: 50-100 genomes (soil, sediment, wastewater)
+  - Other vertebrates: 50-100 genomes (fish, amphibians if available)
+
+### 2. **Host Diversity Priority**
+```
+HIGH PRIORITY:
+- Homo sapiens (gut microbiome)
+- Bos taurus (rumen, feces)
+- Mus musculus (laboratory studies)
+- Sus scrofa (pig gut)
+- Gallus gallus (chicken gut)
+
+MEDIUM PRIORITY:
+- Ovis aries (sheep)
+- Equus caballus (horse)
+- Capra hircus (goat)
+- Various wild mammals
+
+LOW PRIORITY:
+- Environmental samples
+- Marine organisms
+- Other vertebrates
+```
+
+### 3. **Database Strategy**
+**Use BOTH NCBI and GTDB:**
+- NCBI datasets for initial download and metadata
+- GTDB for taxonomic validation and additional genomes
+- Cross-reference to avoid duplicates
+
+### 4. **Essential Metadata**
+```
+CRITICAL METADATA:
+- Host organism (species, common name)
+- Body site (gut, rumen, feces, cecum, etc.)
+- Assembly quality (completeness, contamination)
+- Assembly level (complete, scaffold, contig)
+- Isolation source details
+- Geographic location
+- Collection date
+- Diet information (if available)
+- Life stage (adult, juvenile)
+```
+
+## DOWNLOAD COMMANDS
+
+### **Step 1: Search and Download Ruminococcaceae Genomes**
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=ruminococcaceae_download
+#SBATCH --partition=general
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --mem=16G
+#SBATCH --time=4:00:00
+#SBATCH --output=rumino_download_%j.out
+
+# Load modules
+module load ncbi-datasets-cli/14.0.0
+
+# Create working directory
+mkdir -p ruminococcaceae_genomes
+cd ruminococcaceae_genomes
+
+# Download all Ruminococcaceae genomes with metadata
+datasets download genome taxon "Ruminococcaceae" \
+    --include gff3,rna,cds,protein,genome,seq-report \
+    --assembly-level complete,chromosome,scaffold,contig \
+    --assembly-source refseq,genbank \
+    --exclude-atypical \
+    --filename ruminococcaceae_all.zip
+
+# Extract and organize
+unzip ruminococcaceae_all.zip
+```
+
+### **Step 2: Filter by Quality and Host**
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=rumino_filter
+#SBATCH --partition=general
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=8
+#SBATCH --mem=32G
+#SBATCH --time=2:00:00
+
+# Parse assembly report for quality filtering
+python3 << 'EOF'
+import pandas as pd
+import json
+
+# Load assembly data report
+df = pd.read_csv('ncbi_dataset/data/assembly_data_report.jsonl', lines=True)
+
+# Filter criteria
+filtered = df[
+    (df['assembly_info.assembly_level'].isin(['Complete Genome', 'Scaffold', 'Chromosome'])) &
+    (df['assembly_stats.total_sequence_length'] >= 1000000) &  # >1Mb
+    (df['assembly_stats.total_sequence_length'] <= 8000000) &   # <8Mb
+    (df['assembly_info.assembly_category'] != 'Metagenome-assembled genome')  # Only isolates
+]
+
+# Prioritize by host
+host_priority = {
+    'Homo sapiens': 1,
+    'Bos taurus': 2, 
+    'Mus musculus': 3,
+    'Sus scrofa': 4,
+    'Gallus gallus': 5
+}
+
+# Save filtered list
+filtered.to_csv('filtered_assemblies.csv', index=False)
+print(f"Filtered to {len(filtered)} genomes")
+EOF
+```
+
+### **Step 3: Download Specific High-Quality Genomes**
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=rumino_targeted
+#SBATCH --partition=general
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=6
+#SBATCH --mem=24G
+#SBATCH --time=6:00:00
+
+# Download high-quality genomes from major hosts
+datasets download genome accession \
+    --inputfile high_quality_accessions.txt \
+    --include genome,protein,gff3,seq-report \
+    --filename ruminococcaceae_hq.zip
+
+# Download GTDB representatives
+curl -O https://data.ace.uq.edu.au/public/gtdb/data/releases/latest/genomic_files_reps/gtdb_genomes_reps.tar.gz
+```
+
+## COMPUTATIONAL REQUIREMENTS
+
+| STEP | TOOL | MEMORY | CPUS | RUNTIME | DISK SPACE |
+|------|------|---------|------|---------|------------|
+| Initial search | ncbi-datasets | 8GB | 2 | 30min | 5GB |
+| Bulk download | ncbi-datasets | 16GB | 4 | 2-4hr | 50-100GB |
+| Metadata parsing | Python/pandas | 32GB | 8 | 1hr | 10GB |
+| Quality filtering | Custom scripts | 16GB | 4 | 30min | 5GB |
+| GTDB download | curl/wget | 8GB | 2 | 1hr | 20GB |
+| Genome extraction | unzip/tar | 24GB | 6 | 2hr | 100GB |
+| **TOTAL STORAGE** | - | - | - | - | **200-300GB** |
+
+## ADVANCED FILTERING SCRIPT
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=rumino_advanced_filter
+#SBATCH --partition=general
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=12
+#SBATCH --mem=48G
+#SBATCH --time=3:00:00
+
+python3 << 'EOF'
+import pandas as pd
+import numpy as np
+from collections import defaultdict
+import json
+
+def filter_genomes_by_criteria():
+    # Load metadata
+    df = pd.read_csv('assembly_data_report.csv')
+    
+    # Quality filters
+    quality_filters = {
+        'min_length': 1_500_000,  # 1.5 Mb minimum
+        'max_length': 7_000_000,  # 7 Mb maximum  
+        'min_n50': 50_000,        # N50 > 50kb
+        'max_contigs': 500        # < 500 contigs
+    }
+    
+    # Host-based stratified sampling
+    host_targets = {
+        'Homo sapiens': 250,
+        'Bos taurus': 150,
+        'Mus musculus': 100,
+        'Sus scrofa': 75,
+        'Gallus gallus': 75,
+        'Ovis aries': 50,
+        'Other mammals': 100,
+        'Environmental': 50
+    }
+    
+    selected_genomes = []
+    
+    for host, target_count in host
+
+[PART 2: Comparative Analysis Pipeline & Resources]
+----------------------------------------------------------------------
+Here are the exact resource requirements for each analysis step with ~400-500 Ruminococcaceae genomes:
+
+## Step 1: Phylogenomic Tree Construction
+**Tool:** GTDB-Tk v2.3.2 + IQ-TREE v2.2.0
+**Memory:** 128 GB RAM
+**CPUs:** 32 cores
+**Runtime:** 8-12 hours
+**Disk:** 50 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=128G
+#SBATCH --cpus-per-task=32
+#SBATCH --time=12:00:00
+gtdbtk classify_wf --genome_dir genomes/ --out_dir gtdbtk_output --cpus 32
+iqtree2 -s concatenated_markers.aln -m TEST -bb 1000 -nt 32
+```
+
+## Step 2: Functional Annotation
+**Tool:** eggNOG-mapper v2.1.12
+**Memory:** 64 GB RAM
+**CPUs:** 24 cores
+**Runtime:** 15-20 hours
+**Disk:** 80 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=64G
+#SBATCH --cpus-per-task=24
+#SBATCH --time=20:00:00
+emapper.py --cpu 24 --mp_start_method forkserver --data_dir /path/to/eggnog_db/ -i proteins.faa -o annotation --override
+```
+
+## Step 3: CAZyme Profiling
+**Tool:** dbCAN v4.0.0 + HMMER v3.3.2
+**Memory:** 32 GB RAM
+**CPUs:** 16 cores
+**Runtime:** 6-8 hours
+**Disk:** 25 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=16
+#SBATCH --time=8:00:00
+run_dbcan proteins.faa protein --out_dir dbcan_output --db_dir /path/to/dbcan_db/ --tools hmmer --hmmer_cpu 16
+```
+
+## Step 4: Metabolic Pathway Reconstruction
+**Tool:** KEGG-mapper + MetaCyc via Pathway Tools
+**Memory:** 48 GB RAM
+**CPUs:** 20 cores
+**Runtime:** 10-14 hours
+**Disk:** 60 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=48G
+#SBATCH --cpus-per-task=20
+#SBATCH --time=14:00:00
+python kegg_mapper.py --input eggnog_annotations.tsv --cpus 20 --output kegg_pathways/
+pathway-tools -lisp -load reconstruct-pathways.lisp
+```
+
+## Step 5: Pan-genome Analysis
+**Tool:** Panaroo v1.3.4
+**Memory:** 96 GB RAM
+**CPUs:** 28 cores
+**Runtime:** 12-18 hours
+**Disk:** 120 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=96G
+#SBATCH --cpus-per-task=28
+#SBATCH --time=18:00:00
+panaroo -i gff_files/*.gff -o panaroo_output --clean-mode strict --core_threshold 0.95 --threads 28 --remove-invalid-genes
+```
+
+## Step 6: Average Nucleotide Identity
+**Tool:** FastANI v1.34
+**Memory:** 16 GB RAM
+**CPUs:** 24 cores
+**Runtime:** 4-6 hours
+**Disk:** 15 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=24
+#SBATCH --time=6:00:00
+fastANI --ql genome_list.txt --rl genome_list.txt -o fastani_output.txt --threads 24 --matrix
+```
+
+## Step 7: Comparative Genomics
+**Tool:** OrthoFinder v2.5.5
+**Memory:** 80 GB RAM
+**CPUs:** 32 cores
+**Runtime:** 20-30 hours
+**Disk:** 100 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=80G
+#SBATCH --cpus-per-task=32
+#SBATCH --time=30:00:00
+orthofinder -f protein_sequences/ -t 32 -a 8 -S diamond_ultra_sens
+```
+
+## Additional Preprocessing Step: Quality Control
+**Tool:** CheckM2 v1.0.2
+**Memory:** 24 GB RAM
+**CPUs:** 16 cores
+**Runtime:** 4-6 hours
+**Disk:** 20 GB output
+**SLURM example:**
+```bash
+#SBATCH --mem=24G
+#SBATCH --cpus-per-task=16
+#SBATCH --time=6:00:00
+checkm2 predict --threads 16 --input genomes/ --output-directory checkm2_output
+```
+
+## Total Resource Summary:
+- **Peak Memory:** 128 GB (phylogenomics step)
+- **Total Compute Time:** ~80-120 hours across all steps
+- **Total Disk Space:** ~470 GB for all outputs
+- **Recommended Queue:** High-memory partition for phylogenomics, standard for others
+
+**Note:** Run steps 2-4 and 6 in parallel after quality control. Steps 1, 5, and 7 should run sequentially as they depend on previous outputs.
+
+[PART 3: Statistical Analysis & Visualization Resources]
+----------------------------------------------------------------------
+Here's a comprehensive statistical analysis plan for identifying herptile-specific adaptations with computational specifications:
+
+## 1. Gene Enrichment Analysis
+
+### **Method Selection:**
+- **Fisher's Exact Test**: For simple presence/absence comparisons
+- **DESeq2**: If you have gene count data (recommended for quantitative analysis)
+- **ANCOM-BC**: For compositional data with batch effects
+
+### **Recommended Approach:**
+```r
+# Primary analysis
+library(DESeq2)  # v1.38+
+library(clusterProfiler)  # v4.6+
+library(enrichplot)  # v1.18+
+
+# For CAZyme analysis specifically
+library(dbCAN)  # Python integration
+```
+
+### **Computational Requirements:**
+- **Memory**: 16-32 GB (depends on gene matrix size)
+- **Runtime**: 2-6 hours for 400-500 genomes
+- **Node**: **Compute node required** (high memory usage)
+- **Cores**: 8-16 recommended for parallel processing
+
+---
+
+## 2. Multivariate Analysis
+
+### **R Packages:**
+```r
+library(vegan)     # v2.6+ (PERMANOVA, ordination)
+library(ape)       # v5.7+ (phylogenetic distances)
+library(phyloseq)  # v1.42+ (microbiome-specific)
+library(ade4)      # v1.7+ (multivariate analysis)
+library(factoextra) # v1.0+ (PCA visualization)
+```
+
+### **Analysis Pipeline:**
+```r
+# PCA on functional profiles
+pca_result <- prcomp(functional_matrix, scale = TRUE)
+
+# PERMANOVA for group differences
+permanova_result <- adonis2(functional_matrix ~ host_type, 
+                           data = metadata, 
+                           permutations = 9999,
+                           method = "bray")
+```
+
+### **Computational Requirements:**
+- **Memory**: 8-16 GB
+- **Runtime**: 30 minutes - 2 hours
+- **Node**: **Compute node recommended** (for PERMANOVA permutations)
+- **Cores**: 4-8 cores
+
+---
+
+## 3. Phylogenetic Comparative Methods
+
+### **Phylogenetic Signal Testing:**
+```r
+library(phytools)  # v1.5+ (phylogenetic signal, mapping)
+library(ape)       # v5.7+ (phylogenetic analysis)
+library(geiger)    # v2.0+ (comparative methods)
+library(caper)     # v1.0+ (PGLS analysis)
+library(picante)   # v1.8+ (phylogenetic diversity)
+```
+
+### **Key Analyses:**
+```r
+# Phylogenetic signal (Pagel's λ, Blomberg's K)
+phylosig(tree, trait_data, method = "lambda")
+phylosig(tree, trait_data, method = "K")
+
+# Phylogenetic generalized least squares
+library(nlme)
+pgls_model <- gls(trait ~ host_type, 
+                  correlation = corBrownian(phy = tree),
+                  data = data)
+```
+
+### **Host-Microbe Coevolution:**
+```r
+library(PACo)      # v0.3+ (Procrustes Application to Cophylogenetic Analysis)
+library(ape)
+library(vegan)
+
+# Parafit analysis for coevolution
+parafit_result <- parafit(host_tree, microbe_tree, 
+                         association_matrix, nperm = 9999)
+```
+
+### **Computational Requirements:**
+- **Memory**: 4-8 GB
+- **Runtime**: 1-3 hours
+- **Node**: **Login node OK** for small datasets, compute node for permutation tests
+- **Cores**: 2-4 cores
+
+---
+
+## 4. Visualization
+
+### **Tools and Packages:**
+```r
+# Phylogenetic trees
+library(ggtree)    # v3.6+ (ggplot2-based tree visualization)
+library(phytools)  # v1.5+ (phylogenetic plotting)
+library(treeio)    # v1.22+ (tree data import)
+
+# Heatmaps and general plots
+library(ComplexHeatmap)  # v2.14+ (advanced heatmaps)
+library(pheatmap)        # v1.0+ (simple heatmaps)
+library(ggplot2)         # v3.4+ (general plotting)
+
+# Interactive visualizations
+library(plotly)    # v4.10+ (interactive plots)
+```
+
+### **Memory-Intensive Visualizations:**
+```r
+# Large phylogenetic tree with annotations
+ggtree(tree, layout = "circular") +
+  geom_tiplab(size = 2) +
+  geom_tree() +
+  theme_tree()
+
+# Complex heatmap with clustering
+ComplexHeatmap::Heatmap(
+  functional_matrix,
+  show_row_names = FALSE,
+  clustering_distance_rows = "euclidean"
+)
+```
+
+### **Computational Requirements:**
+- **Memory**: 2-8 GB (depends on complexity)
+- **Runtime**: 15 minutes - 1 hour
+- **Node**: **Login node OK** for most plots
+- **Graphics**: X11 forwarding or RStudio Server recommended
+
+---
+
+## **Alternative: iTOL for Publication-Quality Trees**
+- **Tool**: Interactive Tree of Life (iTOL)
+- **Input**: Newick format trees + annotation files
+- **Advantages**: Publication-ready, web-based
+- **Memory**: Minimal (web-based)
+
+---
+
+## **Overall Workflow Recommendations:**
+
+### **Session 1: Data Preparation (Login Node)**
+```bash
+# 2-4 GB RAM, 30 minutes
+# Format data, basic QC
+```
+
+### **Session 2: Statistical Analysis (Compute Node)**
+```bash
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=16
+#SBATCH --time=8:00:00
+# Run DESeq2, PERMANOVA, phylogenetic tests
+```
+
+### **Session 3: Visualization (Login Node)**
+```bash
+# 8 GB RAM, 1 hour
+# Generate plots and figures
+```
+
+### **Critical Package Versions:**
+- R ≥ 4.2.0
+- Bioconductor ≥ 3.16
+- Python ≥ 3.8 (for some tools)
+
+Would you like me to elaborate on any specific analysis or provide example code for your particular dataset structure?
