@@ -1,0 +1,182 @@
+I'll provide you with a comprehensive pipeline to extract and analyze high-quality Ruminococcaceae MAGs from your herptile gut metagenome data.
+
+## Complete Ruminococcaceae MAG Analysis Pipeline
+
+### **Phase 1: Data Assessment and Quality Control**
+
+#### Step 1.1: Examine GTDB-Tk Results Structure
+```bash
+# Check GTDB-Tk output structure
+ls -la /bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_gtkdb/
+find /bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_gtkdb/ -name "*.summary.tsv" | head -5
+
+# Expected files: gtdbtk.bac120.summary.tsv, gtdbtk.ar53.summary.tsv
+```
+
+#### Step 1.2: Examine CheckM Results
+```bash
+# Check CheckM output structure
+ls -la /bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_checkm/
+find /bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_checkm/ -name "*.txt" -o -name "*.tsv" | head -5
+
+# Expected file: checkm_results.txt or similar quality metrics file
+```
+
+### **Phase 2: Ruminococcaceae MAG Identification**
+
+#### Step 2.1: Extract Ruminococcaceae Classifications
+```python
+#!/usr/bin/env python3
+# extract_ruminococcaceae.py
+
+import pandas as pd
+import os
+import glob
+
+def extract_ruminococcaceae_mags():
+    """Extract MAGs classified as Ruminococcaceae family"""
+    
+    # Find GTDB-Tk summary files
+    gtdb_files = glob.glob("/bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_gtkdb/**/gtdbtk.bac120.summary.tsv", recursive=True)
+    
+    ruminococcaceae_mags = []
+    
+    for gtdb_file in gtdb_files:
+        try:
+            df = pd.read_csv(gtdb_file, sep='\t')
+            
+            # Filter for Ruminococcaceae family
+            rumino_mask = df['classification'].str.contains('f__Ruminococcaceae', na=False)
+            rumino_mags = df[rumino_mask]
+            
+            if not rumino_mags.empty:
+                # Add sample information
+                sample_id = os.path.basename(os.path.dirname(gtdb_file))
+                rumino_mags['sample_id'] = sample_id
+                ruminococcaceae_mags.append(rumino_mags)
+                
+        except Exception as e:
+            print(f"Error processing {gtdb_file}: {e}")
+    
+    if ruminococcaceae_mags:
+        all_rumino = pd.concat(ruminococcaceae_mags, ignore_index=True)
+        all_rumino.to_csv('ruminococcaceae_mags_raw.tsv', sep='\t', index=False)
+        print(f"Found {len(all_rumino)} Ruminococcaceae MAGs across samples")
+        return all_rumino
+    else:
+        print("No Ruminococcaceae MAGs found")
+        return pd.DataFrame()
+
+if __name__ == "__main__":
+    rumino_mags = extract_ruminococcaceae_mags()
+```
+
+#### Step 2.2: Integrate Quality Metrics
+```python
+#!/usr/bin/env python3
+# integrate_quality_metrics.py
+
+import pandas as pd
+import glob
+import re
+
+def parse_checkm_results():
+    """Parse CheckM results for quality metrics"""
+    
+    checkm_files = glob.glob("/bigdata/stajichlab/shared/projects/Herptile/Metagenome/Fecal/results_bins_checkm/**/checkm_results.txt", recursive=True)
+    
+    quality_data = []
+    
+    for checkm_file in checkm_files:
+        try:
+            # Parse CheckM output (adjust column names based on actual format)
+            df = pd.read_csv(checkm_file, sep='\t', skiprows=1, header=0)
+            
+            # Extract sample ID from path
+            sample_id = os.path.basename(os.path.dirname(checkm_file))
+            df['sample_id'] = sample_id
+            
+            quality_data.append(df[['Bin Id', 'Completeness', 'Contamination', 'Strain heterogeneity', 'sample_id']])
+            
+        except Exception as e:
+            print(f"Error processing {checkm_file}: {e}")
+    
+    if quality_data:
+        all_quality = pd.concat(quality_data, ignore_index=True)
+        return all_quality
+    else:
+        return pd.DataFrame()
+
+def merge_taxonomy_quality():
+    """Merge taxonomy and quality data"""
+    
+    # Load Ruminococcaceae MAGs
+    rumino_mags = pd.read_csv('ruminococcaceae_mags_raw.tsv', sep='\t')
+    
+    # Load quality metrics
+    quality_metrics = parse_checkm_results()
+    
+    if quality_metrics.empty:
+        print("No quality metrics found")
+        return rumino_mags
+    
+    # Merge on MAG ID and sample
+    merged = pd.merge(
+        rumino_mags, 
+        quality_metrics,
+        left_on=['user_genome', 'sample_id'],
+        right_on=['Bin Id', 'sample_id'],
+        how='left'
+    )
+    
+    merged.to_csv('ruminococcaceae_mags_with_quality.tsv', sep='\t', index=False)
+    return merged
+
+if __name__ == "__main__":
+    merged_data = merge_taxonomy_quality()
+```
+
+### **Phase 3: High-Quality MAG Filtering**
+
+#### Step 3.1: Apply Quality Filters
+```python
+#!/usr/bin/env python3
+# filter_high_quality_mags.py
+
+import pandas as pd
+import numpy as np
+
+def filter_high_quality_ruminococcaceae():
+    """Filter for high-quality Ruminococcaceae MAGs"""
+    
+    # Load merged data
+    df = pd.read_csv('ruminococcaceae_mags_with_quality.tsv', sep='\t')
+    
+    # Apply quality filters
+    high_quality = df[
+        (df['Completeness'] >= 90.0) &
+        (df['Contamination'] <= 5.0) &
+        (df['classification'].str.contains('f__Ruminococcaceae', na=False))
+    ].copy()
+    
+    # Additional Ruminococcaceae-specific filters
+    # Remove MAGs with ambiguous taxonomy
+    high_quality = high_quality[
+        ~high_quality['classification'].str.contains('unclassified', na=False, case=False)
+    ]
+    
+    # Calculate quality score (Parks et al. 2018)
+    high_quality['quality_score'] = high_quality['Completeness'] - (5 * high_quality['Contamination'])
+    
+    # Sort by quality score
+    high_quality = high_quality.sort_values('quality_score', ascending=False)
+    
+    # Save results
+    high_quality.to_csv('high_quality_ruminococcaceae_mags.tsv', sep='\t', index=False)
+    
+    print(f"High-quality Ruminococcaceae MAGs: {len(high_quality)}")
+    print(f"Quality score range: {high_quality['quality_score'].min():.2f} - {high_quality['quality_score'].max():.2f}")
+    
+    return high_quality
+
+def
