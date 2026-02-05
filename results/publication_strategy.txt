@@ -1,0 +1,51 @@
+✓ Multi-AI Agent initialized
+  - Claude Sonnet 4: Ready for bioinformatics & analysis
+  - Gemini 2.5 Flash: Ready for literature review & biological interpretation
+
+🦠 Ruminococcaceae Analysis System Ready
+
+============================================================
+Task Type: ANALYSIS
+============================================================
+
+📊 Using Claude for statistical analysis...
+
+Here's a **minimum viable pipeline** for a high-impact publication on herptile Ruminococcaceae MAGs:
+
+## **ESSENTIAL (Must-do)**
+
+### **1. Phylogenomic Analysis (2-3 weeks)**
+- **ANI/AAI clustering** → identify novel species/genera
+- **Core gene phylogeny** (120 universal markers) vs. existing Ruminococcaceae
+- **Key result**: "X novel species, Y genera" - this is your novelty hook
+
+### **2. Functional Profiling (2-3 weeks)**
+- **CAZyme annotation** (dbCAN) - focus on fiber degradation enzymes
+- **KEGG pathway analysis** - carbohydrate metabolism, SCFAs
+- **Key result**: Unique metabolic capabilities vs. mammalian Ruminococcaceae
+
+### **3. Comparative Genomics (2-3 weeks)**
+- **Pan-genome analysis** of your 284 MAGs
+- **Genome size/GC content distributions**
+- **Compare to ~50-100 reference mammalian Ruminococcaceae genomes**
+- **Key result**: Herptile-specific genomic adaptations
+
+## **NICE-TO-HAVE (If time permits)**
+
+### **4. Host Association Analysis (1 week)**
+- Simple correlation between MAG diversity and host taxonomy/diet
+- Basic beta-diversity ordination
+
+## **SKIP FOR NOW**
+- ❌ Detailed metabolic modeling
+- ❌ Experimental validation
+- ❌ Metatranscriptomics
+- ❌ Single-gene horizontal transfer analysis
+- ❌ Detailed biogeography
+
+## **Target Journals**
+With this pipeline: **mSystems**, **Microbiome**, or **ISME Journal**
+
+**Key message**: "Herptile gut microbiomes harbor a distinct Ruminococcaceae radiation with unique fiber-degrading capabilities"
+
+This approach gives you **novelty** (new taxa) + **ecological significance** (functional differences) with manageable scope. Would you like me to elaborate on any of these analyses?
